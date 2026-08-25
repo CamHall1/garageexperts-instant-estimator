@@ -38,7 +38,17 @@ body {
   font-family: var(--font-body-sans), Arial, Helvetica, sans-serif;
 }
 
-.ge-places-autocomplete {
-  width: 100%;
-  display: block;
+/* Google's classic Places Autocomplete suggestion dropdown -- appended to
+   document.body, so it can only be reached with a global selector. */
+.pac-container {
+  font-family: var(--font-body-sans), Arial, Helvetica, sans-serif;
+  margin-top: 0.25rem;
+  border: 2px solid var(--ge-light-gray);
+  border-radius: 0.75rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.pac-item {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.95rem;
 }

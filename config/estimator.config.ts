@@ -43,7 +43,7 @@ export const addressConfig = {
   bias: {
     lat: 45.5152,
     lng: -122.6784,
-    radiusMeters: 60000,
+    radiusMeters: 50000,
   },
   countryRestrictions: ["us"] as const,
 } as const;

@@ -3,7 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { addressConfig } from "@/config/estimator.config";
 import { publicEnv } from "@/lib/env";
-import { loadGoogleMapsScript, parseGooglePlace, type ParsedGooglePlace } from "@/lib/address/google-places";
+import {
+  loadGoogleMapsScript,
+  parseLegacyGooglePlace,
+  type ParsedGooglePlace,
+} from "@/lib/address/google-places";
 import { StepHeading } from "@/components/estimator/StepHeading";
 import type { AddressInput } from "@/lib/validation/schemas";
 
@@ -40,8 +44,10 @@ export function AddressStep({ initialValue, onNext, onBack }: AddressStepProps) 
   );
   const [error, setError] = useState<string | null>(null);
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const elementRef = useRef<HTMLElement | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const autocompleteRef = useRef<{ addListener: (event: string, cb: () => void) => void } | null>(
+    null,
+  );
 
   const [manual, setManual] = useState({
     addressLine1: initialValue?.addressSource === "manual" ? initialValue.addressLine1 : "",
@@ -57,37 +63,34 @@ export function AddressStep({ initialValue, onNext, onBack }: AddressStepProps) 
     loadGoogleMapsScript(apiKey)
       .then(async () => {
         if (cancelled || !window.google?.maps?.importLibrary) throw new Error("unavailable");
-        const { PlaceAutocompleteElement } = (await window.google.maps.importLibrary(
-          "places",
-        )) as { PlaceAutocompleteElement: new (opts?: Record<string, unknown>) => HTMLElement };
+        const { Autocomplete } = (await window.google.maps.importLibrary("places")) as {
+          Autocomplete: new (
+            input: HTMLInputElement,
+            opts?: Record<string, unknown>,
+          ) => {
+            addListener: (event: string, cb: () => void) => void;
+            getPlace: () => Record<string, unknown>;
+          };
+        };
 
-        if (cancelled || !containerRef.current) return;
+        if (cancelled || !inputRef.current) return;
 
-        const el = new PlaceAutocompleteElement({
-          includedRegionCodes: [...addressConfig.countryRestrictions],
-          locationBias: {
-            radius: addressConfig.bias.radiusMeters,
-            center: { lat: addressConfig.bias.lat, lng: addressConfig.bias.lng },
-          },
-        }) as HTMLElement & Record<string, unknown>;
-        el.setAttribute("placeholder", "Start typing your address…");
-        el.className = "ge-places-autocomplete";
+        const autocomplete = new Autocomplete(inputRef.current, {
+          fields: ["address_components", "formatted_address", "geometry", "place_id"],
+          types: ["address"],
+          componentRestrictions: { country: [...addressConfig.countryRestrictions] },
+        });
 
-        el.addEventListener("gmp-select", async (event: Event) => {
+        autocomplete.addListener("place_changed", () => {
           try {
-            const { placePrediction } = event as unknown as {
-              placePrediction: { toPlace: () => Record<string, unknown> };
-            };
-            const place = placePrediction.toPlace() as {
-              fetchFields: (opts: { fields: string[] }) => Promise<void>;
-            } & Record<string, unknown>;
-            await place.fetchFields({
-              fields: ["addressComponents", "formattedAddress", "location", "id"],
-            });
-            const parsed = parseGooglePlace(
-              place as unknown as Parameters<typeof parseGooglePlace>[0],
+            const place = autocomplete.getPlace();
+            const parsed = parseLegacyGooglePlace(
+              place as unknown as Parameters<typeof parseLegacyGooglePlace>[0],
             );
-            if (!parsed.formattedAddress) return;
+            if (!parsed.formattedAddress) {
+              setError("We couldn't read that address. Please try again or enter it manually.");
+              return;
+            }
             setPlacesSelection(toAddressInput(parsed));
             setError(null);
           } catch {
@@ -95,9 +98,7 @@ export function AddressStep({ initialValue, onNext, onBack }: AddressStepProps) 
           }
         });
 
-        containerRef.current.innerHTML = "";
-        containerRef.current.appendChild(el);
-        elementRef.current = el;
+        autocompleteRef.current = autocomplete;
         setPlacesStatus("ready");
       })
       .catch(() => {
@@ -154,13 +155,19 @@ export function AddressStep({ initialValue, onNext, onBack }: AddressStepProps) 
 
       {!manualMode ? (
         <div>
-          <label htmlFor="ge-places-container" className="sr-only">
+          <label htmlFor="ge-places-input" className="sr-only">
             Project address
           </label>
-          <div
-            id="ge-places-container"
-            ref={containerRef}
-            className="ge-places-container min-h-[52px] rounded-xl border-2 border-[var(--ge-light-gray)] focus-within:border-[var(--ge-green)]"
+          <input
+            id="ge-places-input"
+            ref={inputRef}
+            type="text"
+            placeholder="Start typing your address…"
+            autoComplete="off"
+            onChange={() => {
+              if (placesSelection) setPlacesSelection(null);
+            }}
+            className="w-full rounded-xl border-2 border-[var(--ge-light-gray)] px-4 py-3 text-base text-[var(--ge-dark-gray)] outline-none focus-visible:border-[var(--ge-green)]"
           />
           {placesStatus === "loading" ? (
             <p className="mt-2 text-sm text-[var(--ge-supporting-gray)]">Loading address search…</p>

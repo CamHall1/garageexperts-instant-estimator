@@ -1,14 +1,20 @@
 "use client";
 
 /**
- * Thin wrapper around the Google Maps JavaScript "Places (New)" library —
- * specifically the PlaceAutocompleteElement web component. Typed loosely
- * (the global `google` namespace) rather than pulling in @types/google.maps,
- * since this preview-era API surface still moves between releases; every
- * call is defensively guarded so a shape change degrades to manual entry
- * instead of crashing the estimator.
+ * Thin wrapper around the Google Maps JavaScript "Places" library — the
+ * classic `Autocomplete` class bound to a plain `<input>`, not the newer
+ * `PlaceAutocompleteElement` web component. The web component renders
+ * inside a closed shadow root that follows the visitor's OS/browser
+ * `prefers-color-scheme` internally with no documented way to override it,
+ * which produced a dark box that didn't match this site's light design.
+ * Binding to our own input avoids that entirely: it's a normal DOM element
+ * styled with our own CSS, regardless of the visitor's system theme.
  *
- * Reference: https://developers.google.com/maps/documentation/javascript/place-autocomplete-new
+ * Typed loosely (the global `google` namespace) rather than pulling in
+ * @types/google.maps; every call is defensively guarded so a shape change
+ * degrades to manual entry instead of crashing the estimator.
+ *
+ * Reference: https://developers.google.com/maps/documentation/javascript/place-autocomplete
  */
 
 declare global {
@@ -111,5 +117,44 @@ export function parseGooglePlace(place: {
     latitude: resolveLatLng(location?.lat),
     longitude: resolveLatLng(location?.lng),
     placeId: place.id ?? "",
+  };
+}
+
+type LegacyAddressComponent = { long_name: string; short_name: string; types: string[] };
+
+function legacyComponentText(
+  components: LegacyAddressComponent[] | undefined,
+  type: string,
+  short = false,
+): string {
+  const match = components?.find((c) => c.types?.includes(type));
+  return (short ? match?.short_name : match?.long_name) ?? "";
+}
+
+/** Parses the classic `Autocomplete#getPlace()` result into our address shape. */
+export function parseLegacyGooglePlace(place: {
+  formatted_address?: string;
+  address_components?: LegacyAddressComponent[];
+  geometry?: { location?: { lat?: () => number; lng?: () => number } };
+  place_id?: string;
+}): ParsedGooglePlace {
+  const components = place.address_components ?? [];
+  const streetNumber = legacyComponentText(components, "street_number");
+  const route = legacyComponentText(components, "route");
+
+  return {
+    formattedAddress: place.formatted_address ?? "",
+    addressLine1: [streetNumber, route].filter(Boolean).join(" "),
+    addressLine2: "",
+    city:
+      legacyComponentText(components, "locality") ||
+      legacyComponentText(components, "postal_town") ||
+      legacyComponentText(components, "sublocality"),
+    region: legacyComponentText(components, "administrative_area_level_1", true),
+    postalCode: legacyComponentText(components, "postal_code"),
+    country: legacyComponentText(components, "country", true) || "US",
+    latitude: place.geometry?.location?.lat?.() ?? null,
+    longitude: place.geometry?.location?.lng?.() ?? null,
+    placeId: place.place_id ?? "",
   };
 }
