@@ -1,26 +1,42 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Brand tokens -- keep in sync with config/estimator.config.ts brandColors */
+  --ge-black: #000000;
+  --ge-green: #3aad2c;
+  --ge-green-dark: #2f8a23;
+  --ge-white: #ffffff;
+  --ge-light-gray: #efefef;
+  --ge-dark-gray: #272727;
+  --ge-supporting-gray: #afafaf;
+
+  --background: var(--ge-white);
+  --foreground: var(--ge-dark-gray);
+
+  /*
+   * The corporate site uses licensed Nobel / Nobel Condensed fonts, which we
+   * cannot redistribute. --font-heading-local is a hook: once licensed font
+   * files are added (see docs/ASSET_REPLACEMENT.md), point it at a local
+   * @font-face family. Until then it falls back to a condensed system stack.
+   */
+  --font-heading-local: "";
+  --font-heading: var(--font-heading-local), "Arial Narrow", "Helvetica Neue Condensed",
+    var(--font-body-sans), sans-serif;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-body-sans);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-body-sans), Arial, Helvetica, sans-serif;
+}
+
+.ge-places-autocomplete {
+  width: 100%;
+  display: block;
 }
