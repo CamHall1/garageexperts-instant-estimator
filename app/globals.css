@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
+
   /* Brand tokens -- keep in sync with config/estimator.config.ts brandColors */
   --ge-black: #000000;
   --ge-green: #3aad2c;
