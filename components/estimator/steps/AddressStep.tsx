@@ -35,6 +35,85 @@ function toAddressInput(parsed: ParsedGooglePlace): AddressInput {
   };
 }
 
+type AddressFieldValues = {
+  addressLine1: string;
+  city: string;
+  region: string;
+  postalCode: string;
+};
+
+function buildFormattedAddress(fields: AddressFieldValues): string {
+  return [fields.addressLine1, [fields.city, fields.region].filter(Boolean).join(", "), fields.postalCode]
+    .filter(Boolean)
+    .join(", ");
+}
+
+/** Editable Address Line 1 / City / State / Zip fields, shared by manual entry
+ * and by the post-selection confirmation view so a visitor can verify (and
+ * correct) what Google Places returned. */
+function AddressFields({
+  value,
+  onChange,
+}: {
+  value: AddressFieldValues;
+  onChange: (next: AddressFieldValues) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <label htmlFor="addr-line1" className="mb-1 block text-sm font-medium text-[var(--ge-dark-gray)]">
+          Address Line 1
+        </label>
+        <input
+          id="addr-line1"
+          autoComplete="address-line1"
+          value={value.addressLine1}
+          onChange={(e) => onChange({ ...value, addressLine1: e.target.value })}
+          className="w-full rounded-xl border-2 border-[var(--ge-light-gray)] px-4 py-3 text-base outline-none focus-visible:border-[var(--ge-green)]"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label htmlFor="addr-city" className="mb-1 block text-sm font-medium text-[var(--ge-dark-gray)]">
+            City
+          </label>
+          <input
+            id="addr-city"
+            autoComplete="address-level2"
+            value={value.city}
+            onChange={(e) => onChange({ ...value, city: e.target.value })}
+            className="w-full rounded-xl border-2 border-[var(--ge-light-gray)] px-4 py-3 text-base outline-none focus-visible:border-[var(--ge-green)]"
+          />
+        </div>
+        <div>
+          <label htmlFor="addr-region" className="mb-1 block text-sm font-medium text-[var(--ge-dark-gray)]">
+            State/Region
+          </label>
+          <input
+            id="addr-region"
+            autoComplete="address-level1"
+            value={value.region}
+            onChange={(e) => onChange({ ...value, region: e.target.value })}
+            className="w-full rounded-xl border-2 border-[var(--ge-light-gray)] px-4 py-3 text-base outline-none focus-visible:border-[var(--ge-green)]"
+          />
+        </div>
+      </div>
+      <div>
+        <label htmlFor="addr-postal" className="mb-1 block text-sm font-medium text-[var(--ge-dark-gray)]">
+          Postal Code
+        </label>
+        <input
+          id="addr-postal"
+          autoComplete="postal-code"
+          value={value.postalCode}
+          onChange={(e) => onChange({ ...value, postalCode: e.target.value })}
+          className="w-full rounded-xl border-2 border-[var(--ge-light-gray)] px-4 py-3 text-base outline-none focus-visible:border-[var(--ge-green)]"
+        />
+      </div>
+    </div>
+  );
+}
+
 export function AddressStep({ initialValue, onNext, onBack }: AddressStepProps) {
   const apiKey = publicEnv.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const [manualMode, setManualMode] = useState(!apiKey || initialValue?.addressSource === "manual");
@@ -92,6 +171,12 @@ export function AddressStep({ initialValue, onNext, onBack }: AddressStepProps) 
               return;
             }
             setPlacesSelection(toAddressInput(parsed));
+            setManual({
+              addressLine1: parsed.addressLine1,
+              city: parsed.city,
+              region: parsed.region,
+              postalCode: parsed.postalCode,
+            });
             setError(null);
           } catch {
             setError("We couldn't read that address. Please try again or enter it manually.");
@@ -116,7 +201,23 @@ export function AddressStep({ initialValue, onNext, onBack }: AddressStepProps) 
         setError("Select an address from the suggestions, or enter it manually.");
         return;
       }
-      onNext(placesSelection);
+      if (!manual.addressLine1.trim()) {
+        setError("Enter the street address.");
+        return;
+      }
+      onNext({
+        formattedAddress: buildFormattedAddress(manual),
+        addressLine1: manual.addressLine1.trim(),
+        addressLine2: "",
+        city: manual.city.trim(),
+        region: manual.region.trim(),
+        postalCode: manual.postalCode.trim(),
+        country: placesSelection.country || "US",
+        latitude: placesSelection.latitude,
+        longitude: placesSelection.longitude,
+        placeId: placesSelection.placeId,
+        addressSource: "google_places",
+      });
       return;
     }
 
@@ -124,16 +225,9 @@ export function AddressStep({ initialValue, onNext, onBack }: AddressStepProps) 
       setError("Enter the street address.");
       return;
     }
-    const formattedAddress = [
-      manual.addressLine1,
-      [manual.city, manual.region].filter(Boolean).join(", "),
-      manual.postalCode,
-    ]
-      .filter(Boolean)
-      .join(", ");
 
     onNext({
-      formattedAddress,
+      formattedAddress: buildFormattedAddress(manual),
       addressLine1: manual.addressLine1.trim(),
       addressLine2: "",
       city: manual.city.trim(),
@@ -173,9 +267,12 @@ export function AddressStep({ initialValue, onNext, onBack }: AddressStepProps) 
             <p className="mt-2 text-sm text-[var(--ge-supporting-gray)]">Loading address search…</p>
           ) : null}
           {placesSelection ? (
-            <p className="mt-2 text-sm font-medium text-[var(--ge-dark-gray)]">
-              Selected: {placesSelection.formattedAddress}
-            </p>
+            <div className="mt-4">
+              <p className="mb-2 text-sm font-medium text-[var(--ge-dark-gray)]">
+                Confirm the details below:
+              </p>
+              <AddressFields value={manual} onChange={setManual} />
+            </div>
           ) : null}
           <button
             type="button"
@@ -187,56 +284,7 @@ export function AddressStep({ initialValue, onNext, onBack }: AddressStepProps) 
         </div>
       ) : (
         <div className="space-y-4">
-          <div>
-            <label htmlFor="addr-line1" className="mb-1 block text-sm font-medium text-[var(--ge-dark-gray)]">
-              Address Line 1
-            </label>
-            <input
-              id="addr-line1"
-              autoComplete="address-line1"
-              value={manual.addressLine1}
-              onChange={(e) => setManual((m) => ({ ...m, addressLine1: e.target.value }))}
-              className="w-full rounded-xl border-2 border-[var(--ge-light-gray)] px-4 py-3 text-base outline-none focus-visible:border-[var(--ge-green)]"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="addr-city" className="mb-1 block text-sm font-medium text-[var(--ge-dark-gray)]">
-                City
-              </label>
-              <input
-                id="addr-city"
-                autoComplete="address-level2"
-                value={manual.city}
-                onChange={(e) => setManual((m) => ({ ...m, city: e.target.value }))}
-                className="w-full rounded-xl border-2 border-[var(--ge-light-gray)] px-4 py-3 text-base outline-none focus-visible:border-[var(--ge-green)]"
-              />
-            </div>
-            <div>
-              <label htmlFor="addr-region" className="mb-1 block text-sm font-medium text-[var(--ge-dark-gray)]">
-                State/Region
-              </label>
-              <input
-                id="addr-region"
-                autoComplete="address-level1"
-                value={manual.region}
-                onChange={(e) => setManual((m) => ({ ...m, region: e.target.value }))}
-                className="w-full rounded-xl border-2 border-[var(--ge-light-gray)] px-4 py-3 text-base outline-none focus-visible:border-[var(--ge-green)]"
-              />
-            </div>
-          </div>
-          <div>
-            <label htmlFor="addr-postal" className="mb-1 block text-sm font-medium text-[var(--ge-dark-gray)]">
-              Postal Code
-            </label>
-            <input
-              id="addr-postal"
-              autoComplete="postal-code"
-              value={manual.postalCode}
-              onChange={(e) => setManual((m) => ({ ...m, postalCode: e.target.value }))}
-              className="w-full rounded-xl border-2 border-[var(--ge-light-gray)] px-4 py-3 text-base outline-none focus-visible:border-[var(--ge-green)]"
-            />
-          </div>
+          <AddressFields value={manual} onChange={setManual} />
           {apiKey ? (
             <button
               type="button"
