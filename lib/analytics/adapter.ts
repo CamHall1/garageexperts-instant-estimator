@@ -89,6 +89,34 @@ function isDuplicate(eventId: string): boolean {
   return false;
 }
 
+const LEAD_FIRED_KEY = "ge_lead_fired";
+
+/**
+ * True if a Lead conversion already fired in this browser session. A visitor
+ * who edits their answers and resubmits contact info is the same lead, so ad
+ * platforms should only count them once. Falls back to an in-memory flag when
+ * sessionStorage is unavailable.
+ */
+let leadFiredInMemory = false;
+function leadAlreadyFiredThisSession(): boolean {
+  if (leadFiredInMemory) return true;
+  try {
+    if (window.sessionStorage.getItem(LEAD_FIRED_KEY)) return true;
+  } catch {
+    // sessionStorage blocked; rely on the in-memory flag
+  }
+  return false;
+}
+
+function markLeadFiredThisSession(): void {
+  leadFiredInMemory = true;
+  try {
+    window.sessionStorage.setItem(LEAD_FIRED_KEY, "1");
+  } catch {
+    // ignore
+  }
+}
+
 export const analytics = {
   viewed(): void {
     fireGenericEvent(analyticsEvents.estimatorViewed);
@@ -117,6 +145,8 @@ export const analytics = {
       postToParent("lead", { estimateId, analyticsEventId });
       return;
     }
+    if (leadAlreadyFiredThisSession()) return;
+    markLeadFiredThisSession();
     firePixelLead();
     fireGenericEvent(analyticsEvents.estimatorLeadCreated);
   },
